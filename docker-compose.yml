@@ -1,0 +1,84 @@
+# Lancement : docker compose up -d --build   puis ouvrir http://localhost:8080
+services:
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db:/docker-entrypoint-initdb.d:ro # schéma + rôle applicatif (au 1er démarrage)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://app_user:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET}
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD}
+      DEMO_PASSWORD: ${DEMO_PASSWORD}
+      SEED_DEMO: ${SEED_DEMO}
+      APP_URL: ${APP_URL}
+      PUBLIC_RATE_LIMIT: ${PUBLIC_RATE_LIMIT:-100}
+      RELANCES_AUTO: ${RELANCES_AUTO}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      MAIL_FROM: ${MAIL_FROM}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_SECURE: ${SMTP_SECURE}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      MAIL_NOTIFICATIONS: ${MAIL_NOTIFICATIONS}
+      UPLOAD_DIR: /data/uploads
+      PORT: 4000
+    volumes:
+      - uploads:/data/uploads
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${APP_PORT}:80"
+
+  backup: # sauvegarde quotidienne, rétention 30 jours -> dossier ./backups
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          f=/backups/ecole_$$(date +%Y%m%d_%H%M%S).sql.gz
+          if pg_dump | gzip > $$f; then echo "Sauvegarde OK : $$f"; else echo "ECHEC sauvegarde"; rm -f $$f; fi
+          find /backups -name 'ecole_*.sql.gz' -mtime +30 -delete
+          sleep 86400
+        done
+
+volumes:
+  pgdata:
+  uploads:

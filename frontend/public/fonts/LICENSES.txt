@@ -1,0 +1,4 @@
+Polices et icônes embarquées (hébergées localement, aucun appel à un service externe) :
+- Inter (Rasmus Andersson) — SIL Open Font License 1.1 — via @fontsource-variable/inter
+- Plus Jakarta Sans (Tokotype) — SIL Open Font License 1.1 — via @fontsource-variable/plus-jakarta-sans
+- Phosphor Icons (Helena Zhang, Tobias Fried) — licence MIT (texte complet : LICENSE-phosphor.txt) — https://phosphoricons.com
