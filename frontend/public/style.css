@@ -265,6 +265,40 @@ fieldset.child legend{font:650 var(--fs-base) var(--font-display);padding:0 var(
 .cred code{font-size:var(--fs-md);padding:4px 10px;background:var(--surface);border:1px solid var(--border);user-select:all;overflow-wrap:anywhere}
 .steps{margin:0 0 var(--s4);padding-left:var(--s5);color:var(--text-2)}.steps li{margin:4px 0}
 @media (max-width:720px){.pub-top{padding:var(--s3) var(--s4)}.pub-top .btn span{display:none}}
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--s4);
+  margin-bottom: var(--s4)
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 35%) 1fr auto;
+  gap: var(--s3);
+  align-items: center;
+  margin: 6px 0
+}
+
+.bar-t {
+  background: var(--primary-soft);
+  border-radius: 99px;
+  height: 12px;
+  overflow: hidden
+}
+
+.bar-t i {
+  display: block;
+  height: 100%;
+  background: var(--primary-text);
+  border-radius: 99px
+}
+
+.line {
+  width: 100%;
+  height: auto;
+  color: var(--primary-text)
+}
 
 /* ── responsive ── */
 @media (max-width:1500px){main{padding:var(--s5)}.top{padding:0 var(--s5)}}

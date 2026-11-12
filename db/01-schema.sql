@@ -225,3 +225,7 @@ BEGIN
       WITH CHECK (current_setting('app.bypass', true) = 'on' OR school_id = NULLIF(current_setting('app.school_id', true), '')::int)$p$, t);
   END LOOP;
 END $$;
+
+CREATE INDEX IF NOT EXISTS paiements_bi_idx ON paiements (school_id, annee_scolaire, date_paiement) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS absences_bi_idx  ON absences  (school_id, annee_scolaire, date_absence);
+CREATE INDEX IF NOT EXISTS notes_eval_idx   ON notes     (school_id, evaluation_id);

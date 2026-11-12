@@ -107,6 +107,11 @@
   nav("finance", "Finances des écoles", "coins", ["superadmin"]);
   nav("impayes", "Qui a payé ?", "wallet", ["admin", "comptable"], "Finances");
   nav("tarifs", "Grille tarifaire", "tag", ["comptable"], "Finances");
+  nav("analyse", "Analyse BI", "chart-bar", [
+    "admin",
+    "comptable",
+    "superadmin",
+  ]);
   nav("messages", "Messagerie", "envelope-simple", ALL, "Communication");
   nav(
     "enseignants",
@@ -2063,11 +2068,38 @@
               pattern: "(?=.*[A-Za-z])(?=.*[0-9]).{8,72}",
               help: "Envoyé par e-mail au directeur, qui devra le changer à sa première connexion",
             },
+            { k: "compta_prenom", l: "Comptable : prénom", req: true },
+            { k: "compta_nom", l: "Comptable : nom", req: true },
+            {
+              k: "compta_email",
+              l: "Comptable : e-mail",
+              t: "email",
+              req: true,
+            },
+            {
+              k: "compta_password",
+              l: "Comptable : mot de passe temporaire",
+              t: "password",
+              req: true,
+              minlength: 8,
+              pattern: "(?=.*[A-Za-z])(?=.*[0-9]).{8,72}",
+              help: "Envoyé par e-mail au comptable, qui devra le changer à sa première connexion",
+            },
           ]),
     ],
     toPayload: (b, isNew) => {
       if (!isNew) return b;
-      const { admin_prenom, admin_nom, admin_email, admin_password, ...s } = b;
+      const {
+        admin_prenom,
+        admin_nom,
+        admin_email,
+        admin_password,
+        compta_prenom,
+        compta_nom,
+        compta_email,
+        compta_password,
+        ...s
+      } = b;
       return {
         ...s,
         admin: {
@@ -2076,16 +2108,27 @@
           email: admin_email,
           password: admin_password,
         },
+        comptable: {
+          prenom: compta_prenom,
+          nom: compta_nom,
+          email: compta_email,
+          password: compta_password,
+        },
       };
     },
     after: (res, f, isNew) => {
-      if (isNew && res.admin)
-        toast(
-          res.admin.email_statut === "envoye"
-            ? `École créée : e-mail envoyé à ${res.admin.email}`
-            : "École créée, mais l'e-mail n'a pas pu être envoyé (SMTP) : communiquez les identifiants au directeur",
-          res.admin.email_statut === "envoye" ? "ok" : "bad",
-        );
+      if (!isNew || !res.admin) return;
+      const ko = [res.admin, res.comptable].filter(
+        (x) => x && x.email_statut !== "envoye",
+      );
+      toast(
+        ko.length
+          ? "École créée, mais l'e-mail n'a pas pu être envoyé (SMTP) à : " +
+              ko.map((x) => x.email).join(", ") +
+              " : communiquez-leur les identifiants"
+          : `École créée : e-mails envoyés à ${res.admin.email} et ${res.comptable.email}`,
+        ko.length ? "bad" : "ok",
+      );
     },
     actions: [
       {
@@ -2113,6 +2156,97 @@
       },
     ],
   });
+  // ═════════ Analyse BI ═════════
+  const bars = (rows, fmt = (v) => v) => {
+    const m = Math.max(1, ...rows.map((r) => r.v));
+    return `<div class="bars">${rows.map((r) => `<div class="bar-row"><span class="bar-l">${esc(r.l)}</span><div class="bar-t" role="img" aria-label="${esc(r.l)} : ${esc(fmt(r.v))}"><i style="width:${Math.max(2, (r.v / m) * 100)}%"></i></div><b class="tnum">${esc(fmt(r.v))}</b></div>`).join("") || '<p class="empty">Aucune donnée.</p>'}</div>`;
+  };
+  const line = (pts) => {
+    if (pts.length < 2) return '<p class="empty">Pas assez de données.</p>';
+    const W = 600,
+      H = 160,
+      M = 24,
+      m = Math.max(1, ...pts.map((p) => p.v));
+    const xy = pts.map((p, i) => [
+      M + (i * (W - 2 * M)) / (pts.length - 1),
+      H - M - (p.v / m) * (H - 2 * M),
+    ]);
+    return `<svg viewBox="0 0 ${W} ${H}" class="line" role="img" aria-label="Évolution mensuelle"><polyline fill="none" stroke="currentColor" stroke-width="2.5" points="${xy.map((a) => a.join(",")).join(" ")}"/>${xy.map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="3.5" fill="currentColor"><title>${esc(pts[i].l)} : ${pts[i].v}</title></circle>`).join("")}<text x="${M}" y="${H - 4}" font-size="11" fill="currentColor">${esc(pts[0].l)}</text><text x="${W - M}" y="${H - 4}" font-size="11" text-anchor="end" fill="currentColor">${esc(pts.at(-1).l)}</text></svg>`;
+  };
+
+  P.analyse = async (main) => {
+    const d = await api("GET", "/bi");
+    const kpi = (n, l) =>
+      `<div class="card stat"><div><span>${l}</span><b>${n}</b></div></div>`;
+    const card = (t, body) => `<div class="card"><h2>${t}</h2>${body}</div>`;
+    const pct = (a, b) => (b ? Math.round((100 * a) / b) + " %" : "—");
+    let html = "";
+    if (d.role === "admin") {
+      const k = d.kpis;
+      html = `<div class="kpis">${kpi(k.eleves, "Élèves inscrits")}${kpi(pct(k.eleves, k.capacite), "Taux de remplissage")}${kpi(k.moyenne ?? "—", "Moyenne générale /20")}${kpi(pct(k.abs_non_just, k.abs_total), "Absences non justifiées")}</div>
+      <div class="grid g2">
+        ${card("Effectifs par classe", bars(d.effectifs.map((r) => ({ l: `${r.classe} (cap. ${r.capacite})`, v: r.effectif }))))}
+        ${card("Moyenne par matière /20", bars(d.matieres.map((r) => ({ l: r.matiere, v: r.moyenne }))))}
+        ${card("Moyenne par trimestre", bars(d.trimestres.map((r) => ({ l: "Trimestre " + r.trimestre, v: r.moyenne }))))}
+        ${card("Garçons / filles", bars(d.sexe.map((r) => ({ l: r.sexe === "M" ? "Garçons" : "Filles", v: r.n }))))}
+        ${card("Absences par mois", line(d.absences_mensuelles.map((r) => ({ l: r.mois, v: r.n }))))}
+        ${card("Préinscriptions par mois", line(d.preinscriptions.map((r) => ({ l: r.mois, v: r.n }))))}
+      </div>
+      <div style="margin-top:var(--s4)">${card("Élèves en difficulté (moyenne < 10)", `<table class="tbl"><thead><tr><th>Élève</th><th>Classe</th><th>Moyenne</th></tr></thead><tbody>${d.en_difficulte.map((r) => `<tr><td>${esc(r.nom)} ${esc(r.prenom)}</td><td>${r.niveau ? esc(niv(r.niveau)) + " " + esc(r.section) : "—"}</td><td>${badge(String(r.moyenne), "bad")}</td></tr>`).join("") || '<tr><td colspan="3" class="empty">Aucun élève en difficulté.</td></tr>'}</tbody></table>`)}</div>`;
+    } else if (d.role === "comptable") {
+      const k = d.kpis;
+      html = `<div class="kpis">${kpi(money(k.encaisse), "Encaissé")}${kpi(money(k.du), "Total dû")}${kpi(pct(k.encaisse, k.du), "Taux de recouvrement")}${kpi(money(Math.max(0, k.du - k.encaisse)), "Reste à encaisser")}</div>
+      <div class="grid g2">
+        ${card("Encaissements par mois", line(d.mensuel.map((r) => ({ l: r.mois, v: r.total }))))}
+        ${card(
+          "Par mode de paiement",
+          bars(
+            d.modes.map((r) => ({ l: MODES[r.mode] || r.mode, v: r.total })),
+            money,
+          ),
+        )}
+        ${card(
+          "Par objet (scolarité…)",
+          bars(
+            d.libelles.map((r) => ({ l: r.libelle, v: r.total })),
+            money,
+          ),
+        )}
+        ${card(
+          "Recouvrement par niveau",
+          bars(
+            d.niveaux.map((r) => ({
+              l: niv(r.niveau),
+              v: r.du ? Math.round((100 * r.paye) / r.du) : 0,
+            })),
+            (v) => v + " %",
+          ),
+        )}
+      </div>`;
+    } else {
+      const SL = {
+        trial: "En essai",
+        active: "Actives",
+        suspended: "Suspendues",
+      };
+      html = `<div class="kpis">${d.statuts.map((s) => kpi(s.n, SL[s.status] || s.status)).join("")}</div>
+      <div class="grid g2">
+        ${card("Élèves par école", bars(d.par_ecole.map((r) => ({ l: r.name, v: r.eleves }))))}
+        ${card(
+          "Encaissé par école",
+          bars(
+            d.par_ecole.map((r) => ({ l: r.name, v: r.encaisse })),
+            money,
+          ),
+        )}
+        ${card("Nouvelles écoles par mois", line(d.croissance.map((r) => ({ l: r.mois, v: r.n }))))}
+        ${card("Formules", bars(d.formules.map((r) => ({ l: r.plan, v: r.n }))))}
+      </div>
+      <div style="margin-top:var(--s4)">${card("Abonnements expirés ou expirant sous 30 jours", `<table class="tbl"><tbody>${d.expirent.map((r) => `<tr><td>${esc(r.name)}</td><td>${fdate(r.subscription_end)}</td></tr>`).join("") || '<tr><td class="empty">Aucun.</td></tr>'}</tbody></table>`)}</div>`;
+    }
+    main.innerHTML = `<div class="page-head"><h1>Analyse BI${d.annee ? " — " + esc(d.annee) : ""}</h1></div>${html}`;
+  };
+
   P.ecole = async (main) => {
     const e = await api("GET", "/ecole"),
       next = `${APP.startYear() + 1}-${APP.startYear() + 2}`;

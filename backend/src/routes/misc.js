@@ -218,20 +218,27 @@ router.get(
 );
 
 // Crée le compte directeur (mot de passe temporaire) et lui envoie ses identifiants par e-mail
-async function newAdmin(db, school, b) {
+const ROLES_INIT = {
+  admin: { lib: "directeur", intro: "Votre espace de direction" },
+  comptable: { lib: "comptable", intro: "Votre espace de comptabilité" },
+};
+
+// Crée un compte (mot de passe temporaire) et envoie ses identifiants par e-mail
+async function newUser(db, school, b, role) {
+  const R = ROLES_INIT[role];
   const a = await check(
     b,
     {
-      email: { type: "email", req: true, label: "E-mail directeur" },
-      nom: { type: "name", req: true, label: "Nom directeur" },
-      prenom: { type: "name", req: true, label: "Prénom directeur" },
+      email: { type: "email", req: true, label: `E-mail ${R.lib}` },
+      nom: { type: "name", req: true, label: `Nom ${R.lib}` },
+      prenom: { type: "name", req: true, label: `Prénom ${R.lib}` },
     },
     db,
   );
   const pwd = checkPassword(b.password);
   const u = await db.one(
-    `INSERT INTO users (school_id,email,password_hash,role,nom,prenom,mdp_temporaire) VALUES ($1,$2,$3,'admin',$4,$5,true) RETURNING id,email`,
-    [school.id, a.email, await bcrypt.hash(pwd, 10), a.nom, a.prenom],
+    `INSERT INTO users (school_id,email,password_hash,role,nom,prenom,mdp_temporaire) VALUES ($1,$2,$3,$4,$5,$6,true) RETURNING id,email`,
+    [school.id, a.email, await bcrypt.hash(pwd, 10), role, a.nom, a.prenom],
   );
   const url = (process.env.APP_URL || "http://localhost:8080").replace(
     /\/$/,
@@ -241,11 +248,11 @@ async function newAdmin(db, school, b) {
     db,
     u.id,
     a.email,
-    `Votre compte directeur — ${school.name}`,
+    `Votre compte ${R.lib} — ${school.name}`,
     [
       `Bonjour ${a.prenom} ${a.nom},`,
       "",
-      `Votre espace de direction pour « ${school.name} » a été créé.`,
+      `${R.intro} pour « ${school.name} » a été créé.`,
       "",
       `  Identifiant : ${a.email}`,
       `  Mot de passe temporaire : ${pwd}`,
@@ -257,6 +264,7 @@ async function newAdmin(db, school, b) {
   );
   return { id: u.id, email: u.email, email_statut };
 }
+const newAdmin = (db, school, b) => newUser(db, school, b, "admin");
 
 // Création d'une école : salles + matières automatiques + compte directeur
 router.post(
@@ -282,23 +290,27 @@ router.post(
         400,
         "Les informations du directeur sont obligatoires",
       );
-    const s = await db.one(
-      `INSERT INTO schools (name,status,plan,subscription_end,adresse,telephone,email) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [
-        d.name,
-        d.status,
-        d.plan,
-        d.subscription_end,
-        d.adresse,
-        d.telephone,
-        d.email,
-      ],
-    );
+    if (!req.body.comptable)
+      throw new HttpError(
+        400,
+        "Les informations du comptable sont obligatoires",
+      );
+    const mail = (x) =>
+      String(x?.email || "")
+        .trim()
+        .toLowerCase();
+    if (mail(req.body.admin) === mail(req.body.comptable))
+      throw new HttpError(
+        400,
+        "Le directeur et le comptable doivent avoir des e-mails différents",
+      );
+    const s = await db.one(/* … INSERT INTO schools … inchangé … */);
     await creerSalles(db, s.id, nb_salles);
     await creerMatieres(db, s.id);
-    const admin = await newAdmin(db, s, req.body.admin);
+    const admin = await newUser(db, s, req.body.admin, "admin");
+    const comptable = await newUser(db, s, req.body.comptable, "comptable");
     res.status(201);
-    return { ...s, admin };
+    return { ...s, admin, comptable };
   }),
 );
 

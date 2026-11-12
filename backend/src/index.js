@@ -59,6 +59,7 @@ app.use("/api", require("./routes/misc"));
 app.use("/api", require("./routes/core"));
 app.use("/api", require("./routes/pedago"));
 app.use("/api", require("./routes/finance"));
+app.use("/api", require("./routes/bi"));
 app.use("/api", require("./routes/devoirs"));
 app.use("/api", require("./routes/messages"));
 app.use("/api", require("./files").router);
