@@ -124,6 +124,14 @@ async function main() {
   await require("./seed").seedIfEmpty();
   const port = +process.env.PORT || 4000;
   app.listen(port, () => console.log(`API prête sur le port ${port}`));
+  console.log(
+    "E-mail :",
+    process.env.BREVO_API_KEY
+      ? "API Brevo"
+      : process.env.SMTP_HOST
+        ? `SMTP ${process.env.SMTP_HOST}:${process.env.SMTP_PORT || 587}`
+        : "NON CONFIGURÉ",
+  );
   if (process.env.RELANCES_AUTO !== "false") {
     // relances automatiques (tâche de fond : l'école est passée explicitement)
     const run = async () => {

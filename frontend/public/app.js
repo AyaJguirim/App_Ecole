@@ -563,12 +563,12 @@ function logout() {
   renderLogin();
 }
 const DEMO = [
-  ["Direction", "admin@aboukacem.tn"],
-  ["Comptable", "comptable@aboukacem.tn"],
+  ["Admin Ecole AbouKacem", "admin@aboukacem.tn"],
+  ["Comptable AbouKacem", "comptable@aboukacem.tn"],
   ["Enseignant", "bensalah@aboukacem.tn"],
   ["Parent", "hammami@aboukacem.tn"],
   ["Élève", "youssef.hammami@aboukacem.tn"],
-  ["École B", "admin@ibnkhaldoun.tn"],
+  ["Admin Ecole IbnKhaldoun", "admin@ibnkhaldoun.tn"],
   ["Super-admin", "super@ecole-saas.tn"],
 ];
 APP.themeBtn = themeBtn;
